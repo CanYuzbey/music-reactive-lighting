@@ -1,10 +1,12 @@
 import numpy as np
 from collections import Counter, deque
 
+from app.audio.loudness import rms_loudness, normalize_loudness
 from app.audio.pitch_register import (
     spectral_energy_bands,
     dominant_pitch_register,
 )
+from app.lighting.brightness import apply_pitch_brightness_bias
 
 
 def majority_vote(window):
@@ -12,38 +14,47 @@ def majority_vote(window):
 
 
 def main():
-    print("Pitch register test with short-term window")
+    print("Brightness + Pitch Register Bias Test")
 
     sample_rate = 44100
-
-    # Short-term window for pitch register (categorical)
-    short_window = deque(maxlen=5)
+    pitch_window = deque(maxlen=5)
 
     for i in range(30):
+        # fake audio frame
         t = np.linspace(0, 0.05, int(sample_rate * 0.05), endpoint=False)
-
-        # sweep from low to high
         freq = 100 + (i / 29.0) * 4000
-        frame = (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+        amp = 0.02 + 0.18 * (i / 29.0)
 
+        frame = (amp * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+        # loudness → brightness
+        rms = rms_loudness(frame)
+        brightness = normalize_loudness(rms)
+
+        # pitch register
         bands = spectral_energy_bands(frame, sample_rate)
         dominant = dominant_pitch_register(bands)
+        pitch_window.append(dominant)
 
-        short_window.append(dominant)
+        smoothed_register = (
+            majority_vote(pitch_window)
+            if len(pitch_window) == pitch_window.maxlen
+            else dominant
+        )
 
-        if len(short_window) < short_window.maxlen:
-            smoothed = dominant
-        else:
-            smoothed = majority_vote(short_window)
+        # apply micro bias
+        final_brightness = apply_pitch_brightness_bias(
+            brightness,
+            smoothed_register,
+        )
 
         print(
             f"frame {i:02d} | "
-            f"dominant={dominant.value} | "
-            f"short_term={smoothed.value}"
+            f"base_brightness={brightness:.2f} | "
+            f"register={smoothed_register.value} | "
+            f"final_brightness={final_brightness:.2f}"
         )
 
 
 if __name__ == "__main__":
     main()
-
-
