@@ -1,33 +1,49 @@
-from app.utils.time_window import TimeWindow
+import numpy as np
+from collections import Counter, deque
+
+from app.audio.pitch_register import (
+    spectral_energy_bands,
+    dominant_pitch_register,
+)
+
+
+def majority_vote(window):
+    return Counter(window).most_common(1)[0][0]
 
 
 def main():
-    print("Music-Reactive Lighting: project initialized ✅")
+    print("Pitch register test with short-term window")
 
+    sample_rate = 44100
 
-def test_time_windows():
-    # Time windows
-    instant = TimeWindow(1)    # anlık
-    short = TimeWindow(5)      # kısa dönem
-    mid = TimeWindow(20)       # orta dönem
+    # Short-term window for pitch register (categorical)
+    short_window = deque(maxlen=5)
 
-    # Test values (fake loudness / feature values)
-    test_values = [0.1, 0.2, 0.4, 0.3, 0.15, 0.1, 0.05]
+    for i in range(30):
+        t = np.linspace(0, 0.05, int(sample_rate * 0.05), endpoint=False)
 
-    for v in test_values:
-        instant.push(v)
-        short.push(v)
-        mid.push(v)
+        # sweep from low to high
+        freq = 100 + (i / 29.0) * 4000
+        frame = (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float32)
+
+        bands = spectral_energy_bands(frame, sample_rate)
+        dominant = dominant_pitch_register(bands)
+
+        short_window.append(dominant)
+
+        if len(short_window) < short_window.maxlen:
+            smoothed = dominant
+        else:
+            smoothed = majority_vote(short_window)
 
         print(
-            f"instant={instant.latest():.2f} | "
-            f"short_avg={short.average():.2f} | "
-            f"mid_avg={mid.average():.2f}"
+            f"frame {i:02d} | "
+            f"dominant={dominant.value} | "
+            f"short_term={smoothed.value}"
         )
 
 
 if __name__ == "__main__":
     main()
-    test_time_windows()
 
 
