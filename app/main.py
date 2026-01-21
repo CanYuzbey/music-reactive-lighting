@@ -4,6 +4,8 @@ from app.utils.time_window import TimeWindow
 from app.lighting.dynamics import DynamicsController, DynamicsParams
 from app.mapping.color import pick_color
 from app.lighting.output import render_console
+from app.audio.onset import onset_strength, normalize_onset
+
 
 
 def clamp01(x: float) -> float:
