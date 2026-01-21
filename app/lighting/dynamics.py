@@ -21,6 +21,7 @@ class DynamicsParams:
     # Drop detection
     peak_th: float = 0.65
     surprise_th: float = 0.35
+    onset_th: float = 0.55
 
     # Drop boost duration
     drop_boost_frames: int = 10  # ~ (drop_boost_frames / fps) seconds
@@ -41,10 +42,16 @@ class DynamicsController:
         self.state = DynamicsState()
         self._low_counter = 0
 
-    def update(self, instant_brightness: float, short_brightness: float) -> DynamicsState:
+    def update(self, instant_brightness: float, short_brightness: float, onset: float) -> DynamicsState:
+
         # --- Drop detection (event) ---
         surprise = instant_brightness - short_brightness
-        is_drop = (instant_brightness >= self.p.peak_th) and (surprise >= self.p.surprise_th)
+        is_drop = (
+    (instant_brightness >= self.p.peak_th)
+    and (surprise >= self.p.surprise_th)
+    and (onset >= self.p.onset_th)
+)
+
 
         if is_drop:
             self.state.drop_boost_frames_left = self.p.drop_boost_frames
