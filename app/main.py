@@ -1,4 +1,4 @@
-import numpy as np
+import sys
 
 from app.utils.time_window import TimeWindow
 from app.lighting.dynamics import DynamicsController, DynamicsParams
@@ -8,25 +8,19 @@ from app.lighting.output import render_console
 
 from app.audio.onset import onset_strength, normalize_onset
 from app.audio.loudness import rms_loudness, normalize_loudness
-from app.audio.sim import sine_with_hits
+from app.audio.file_source import frames_from_file
 
 
 def clamp01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 
-def main():
-    print("Real onset test: audio frame -> loudness/brightness + onset -> dynamics + pulse")
-
-    fps = 20
-    sample_rate = 44100
-    frame_size = int(sample_rate / fps)  # ~1 frame per tick
-
+def run_pipeline(frames, fps: float, sample_rate: int):
     instant_b = TimeWindow(1)
-    short_b = TimeWindow(10)  # ~0.5s at fps=20
+    short_b = TimeWindow(10)  # ~0.5s at fps=20 (tune if fps changes)
 
     params = DynamicsParams(
-        enter_hold_frames=3 * fps,
+        enter_hold_frames=int(3 * fps),
         drop_boost_frames=int(0.5 * fps),
     )
     dyn = DynamicsController(params)
@@ -38,20 +32,8 @@ def main():
         decay_s=0.18,
     )
 
-    t0 = 0.0
-    for i in range(200):
-        # --- fake audio frame (will be replaced by real input later) ---
-        frame = sine_with_hits(
-            sample_rate=sample_rate,
-            frame_size=frame_size,
-            t0=t0,
-            base_freq=220.0 + 40.0 * np.sin(i / 50.0),
-            hit_every_s=0.5,
-            hit_strength=0.9,
-        )
-        t0 += frame_size / sample_rate
-
-        # --- loudness -> brightness ---
+    for i, frame in enumerate(frames):
+        # loudness -> brightness
         rms = rms_loudness(frame)
         b = normalize_loudness(rms)
 
@@ -61,10 +43,10 @@ def main():
         ib = instant_b.latest()
         sb = short_b.average()
 
-        # --- real onset (transient strength) ---
+        # onset
         o = normalize_onset(onset_strength(frame))
 
-        # --- dynamics + pulse ---
+        # dynamics + pulse
         st = dyn.update(instant_brightness=ib, short_brightness=sb, onset=o)
 
         if st.minimal_mode:
@@ -80,17 +62,30 @@ def main():
         pstate = pulse.update(o)
         final_pulsed = clamp01(final + 0.12 * pstate.pulse)
 
-        # placeholder hue motion
+        # placeholder hue motion (later: key/chord/emotion)
         phase = (i % 30) / 30.0
         rgb = pick_color(phase)
 
         print(
-            f"{i:03d} | b={b:.2f} ib={ib:.2f} sb={sb:.2f} "
-            f"onset={o:.2f} pulse={pstate.pulse:.2f} "
+            f"{i:05d} | b={b:.2f} onset={o:.2f} pulse={pstate.pulse:.2f} "
             f"minimal={st.minimal_mode} drop={st.drop_boost_frames_left:02d} "
             f"final={final_pulsed:.2f}"
         )
         render_console(rgb, final_pulsed)
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python -m app.main <path_to_44k1_wav>")
+        return
+
+    path = sys.argv[1]
+    fps = 20.0
+
+    info, frames = frames_from_file(path, fps=fps, target_sr=44100)
+    print(f"Loaded: {path} | sr={info.sample_rate} | ch={info.channels} | fps={fps}")
+
+    run_pipeline(frames, fps=fps, sample_rate=info.sample_rate)
 
 
 if __name__ == "__main__":
