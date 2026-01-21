@@ -2,9 +2,13 @@ import numpy as np
 
 from app.utils.time_window import TimeWindow
 from app.lighting.dynamics import DynamicsController, DynamicsParams
+from app.lighting.pulse import PulseTracker
 from app.mapping.color import pick_color
 from app.lighting.output import render_console
-from app.lighting.pulse import PulseTracker
+
+from app.audio.onset import onset_strength, normalize_onset
+from app.audio.loudness import rms_loudness, normalize_loudness
+from app.audio.sim import sine_with_hits
 
 
 def clamp01(x: float) -> float:
@@ -12,11 +16,14 @@ def clamp01(x: float) -> float:
 
 
 def main():
-    print("Console render test: final brightness + onset gating + rhythmic pulse")
+    print("Real onset test: audio frame -> loudness/brightness + onset -> dynamics + pulse")
 
-    fps = 10
-    instant = TimeWindow(1)
-    short = TimeWindow(10)  # ~1s smoothing at fps=10
+    fps = 20
+    sample_rate = 44100
+    frame_size = int(sample_rate / fps)  # ~1 frame per tick
+
+    instant_b = TimeWindow(1)
+    short_b = TimeWindow(10)  # ~0.5s at fps=20
 
     params = DynamicsParams(
         enter_hold_frames=3 * fps,
@@ -24,46 +31,42 @@ def main():
     )
     dyn = DynamicsController(params)
 
-    # Pulse tracker uses the same onset signal (0..1)
     pulse = PulseTracker(
         fps=fps,
-        onset_peak_th=0.60,   # you can tune this
-        refractory_s=0.12,
+        onset_peak_th=0.60,
+        refractory_s=0.10,
         decay_s=0.18,
     )
 
-    # timeline (low -> spike -> settle)
-    timeline = []
-    timeline += [0.08] * 35
-    timeline += [0.06] * 10
-    timeline += [0.95, 0.90, 0.85]  # spike region
-    timeline += [0.40] * 10
-    timeline += [0.10] * 20
+    t0 = 0.0
+    for i in range(200):
+        # --- fake audio frame (will be replaced by real input later) ---
+        frame = sine_with_hits(
+            sample_rate=sample_rate,
+            frame_size=frame_size,
+            t0=t0,
+            base_freq=220.0 + 40.0 * np.sin(i / 50.0),
+            hit_every_s=0.5,
+            hit_strength=0.9,
+        )
+        t0 += frame_size / sample_rate
 
-    prev_b = None
+        # --- loudness -> brightness ---
+        rms = rms_loudness(frame)
+        b = normalize_loudness(rms)
 
-    for i, base in enumerate(timeline):
-        # base brightness with small noise
-        b = clamp01(base + np.random.uniform(-0.02, 0.02))
+        instant_b.push(b)
+        short_b.push(b)
 
-        # onset proxy (for this test): sudden brightness change = "hit"
-        if prev_b is None:
-            o = 0.0
-        else:
-            o = clamp01(abs(b - prev_b) * 8.0)  # scale for visibility
-        prev_b = b
+        ib = instant_b.latest()
+        sb = short_b.average()
 
-        # time windows
-        instant.push(b)
-        short.push(b)
+        # --- real onset (transient strength) ---
+        o = normalize_onset(onset_strength(frame))
 
-        ib = instant.latest()
-        sb = short.average()
-
-        # dynamics (minimal + drop gating)
+        # --- dynamics + pulse ---
         st = dyn.update(instant_brightness=ib, short_brightness=sb, onset=o)
 
-        # base final brightness from dynamics
         if st.minimal_mode:
             final = 0.90 * sb + 0.10 * ib
         else:
@@ -74,21 +77,18 @@ def main():
 
         final = clamp01(final)
 
-        # rhythmic pulse (small additive punch)
         pstate = pulse.update(o)
-        pulse_boost = 0.12 * pstate.pulse  # small, safe amount
-        final_pulsed = clamp01(final + pulse_boost)
+        final_pulsed = clamp01(final + 0.12 * pstate.pulse)
 
-        # placeholder hue motion (later: key/chord/emotion)
+        # placeholder hue motion
         phase = (i % 30) / 30.0
         rgb = pick_color(phase)
 
-        # debug + render
         print(
-            f"{i:03d} | inst={ib:.2f} short={sb:.2f} onset={o:.2f} "
-            f"pulse={pstate.pulse:.2f} minimal={st.minimal_mode} "
-            f"drop_boost={st.drop_boost_frames_left:02d} "
-            f"final={final:.2f} final_pulsed={final_pulsed:.2f}"
+            f"{i:03d} | b={b:.2f} ib={ib:.2f} sb={sb:.2f} "
+            f"onset={o:.2f} pulse={pstate.pulse:.2f} "
+            f"minimal={st.minimal_mode} drop={st.drop_boost_frames_left:02d} "
+            f"final={final_pulsed:.2f}"
         )
         render_console(rgb, final_pulsed)
 
