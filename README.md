@@ -1,5 +1,10 @@
 # Music Reactive Lighting Engine 🎵💡
 
+> [!WARNING]
+> **🚧 WORK IN PROGRESS (Alpha Stage) 🚧**
+> This project is currently in active development. The **Core Sense Engine** (Audio analysis -> Color/Brightness) is fully functional and verifiable via the Debug UI.
+> **Current Limitation**: The system currently runs on PC (Windows/Linux) using loopback audio. The **Hardware Output Layer** (Serial/LED control) is pending implementation.
+
 ### *A High-Frequency Audio-Visual Intelligence System*
 
 **Music Reactive Lighting** is a sophisticated Python-based engine designed to translate musical audio into immersive, real-time lighting effects. Unlike traditional "sound-activated" lights that rely solely on volume thresholds, this system implements a **psychoacoustic emotional analysis pipeline**. It decomposes audio signals into **Valence** (Mood) and **Arousal** (Energy) components, creating a lighting experience that mirrors the emotional arc of the music.
@@ -108,11 +113,29 @@ python -m app.main --live --gui
 ```
 *Note: The system will calibrate for 2 seconds upon start. Please ensure silence during this window.*
 
-**Headless Mode (Deployment)**
-For embedded systems (e.g., Raspberry Pi):
-```bash
-python -m app.main --live
-```
+---
+
+## 🔮 Project Roadmap & Status
+
+This project is divided into **three phases**. We are currently wrapping up **Phase 1**.
+
+### ✅ Phase 1: Core Intelligence (Completed)
+- [x] **Psychoacoustic Analysis**: Developed `MoodEngine` model (Valence/Arousal) based on spectral harmony.
+- [x] **Rhythm Detection**: Implemented hybrid Onset detection (RMS + Spectral Flux) for accurate beat locking.
+- [x] **Adaptive Normalization**: Created "Auto-Calibration" system to handle varying noise floors across devices.
+- [x] **Visual Debugger**: Built real-time UI (`tkinter`) to verify math and color mappings without hardware.
+
+### 🚧 Phase 2: Hardware Integration (Current Focus)
+The following components are required to move from "PC Simulation" to "Standalone Device":
+- [ ] **Physical Output Layer**: Implement `Serial` (UART) communication to send RGB data to an ESP32/Arduino.
+    - *Current State*: Output is purely virtual (Screen).
+- [ ] **Hardware-Specific Optimization**: Port code to Raspberry Pi 4 / Pi Zero 2 W.
+- [ ] **Input Source Handling**: Test with dedicated USB Microphones/Line-In HATs (replacing PC Loopback).
+
+### 🔭 Phase 3: Advanced Features (Planned)
+- [ ] **True Beat Grid**: Implement a state-machine to count Bars/Measures (1-2-3-4) for lighting phrases that change every 4 bars.
+- [ ] **Genre Presets**: Machine Learning classifier to auto-load "Techno" vs "Jazz" profiles.
+- [ ] **Network Sync**: Allow multiple devices to sync via WLED.
 
 ---
 
