@@ -1,78 +1,121 @@
-# Music-Reactive Lighting System
+# Music Reactive Lighting Engine 🎵💡
 
-A music-driven lighting system that translates musical structure and perceived emotion into dynamic color palettes in real time.
+> **"Not just a blinker. A Mood Engine."**
 
----
+This project is a high-fidelity **Audio-Reactive Lighting System** written in Python. Unlike typical "sound-to-light" implementations that simply map volume to brightness, this engine analyzes the **musical emotion** (Valence & Arousal), rhythm, and spectral balance to create a dynamic, living light show.
 
-## Overview
-
-This project explores the relationship between **music, emotion, and color** by designing a lighting system that reacts dynamically to musical input.
-
-The system analyzes a playing song, extracts musically meaningful features such as **key, tempo, harmony, and loudness**, and maps these features to **emotional descriptors** using principles from music theory and common-sense perception.
-
-These emotional descriptors are then translated into **color palettes** based on color theory, which are rendered through dynamic lighting rather than a single static color.
+Designed for **portability**, it is built to run on everything from high-end PCs (via Loopback/WASAPI) to embedded hardware (Raspberry Pi/ESP32) with dedicated audio inputs.
 
 ---
 
-## Core Concept
+## 🔥 Key Features
 
-Instead of assigning one fixed color to a song, the lighting evolves continuously as the music unfolds.
+### 1. The "Mood Engine" (Emotion Analysis)
+Lighting should reflect how the music *feels*, not just how loud it is. We use the **Russell's Circumplex Model of Affect**:
+-   **Arousal (Energy)**: Driven by Loudness, Onset Density (BPM), and Transient Strength.
+-   **Valence (Mood)**: Driven by **Spectral Harmony**.
+    -   *Warm/Happy*: High-Mid dominance (Vocals, Guitars, Snares).
+    -   *Cool/Deep*: Low-end dominance (Pure Bass, Drones).
+    -   **Hybrid Valence**: Combines "Absolute Spectral Anchor" (Genre detection) with "Adaptive Deviation" (Phrasing) to ensure Pop music looks warm and Techno looks intense.
 
-The visible lighting behavior is influenced by:
-- **Tonal characteristics** (e.g. major vs. minor)
-- **Tempo and rhythmic energy**
-- **Instantaneous loudness**
-- **Harmonic context** (planned extension)
+### 2. Auto-Calibration (Smart Noise Gate) 🧠
+Hardware audio inputs are noisy. A generic "threshold" fails on 50% of devices.
+-   **Startup Calibration**: The system captures the first 2 seconds of "Silence" on boot.
+-   **Dynamic Thresholding**: It measures the exact noise floor of your specific hardware (Mic, Line-In, Loopback) and sets the gate *just* above it.
+-   **Result**: "True Black" silence, even on noisy inputs.
 
-This allows the lighting to reflect both the **emotional character** and the **temporal structure** of the music.
-
----
-
-## System Architecture
-
-The project follows a modular pipeline:
-
-1. **Audio Analysis**  
-   Extraction of musical features from an audio file or audio stream.
-
-2. **Emotion Mapping**  
-   Conversion of musical features into emotional representations.
-
-3. **Color Mapping**  
-   Translation of emotional states into coherent color palettes.
-
-4. **Lighting Control**  
-   Real-time rendering of colors on physical or simulated lighting devices.
-
-The architecture is intentionally hardware-agnostic, allowing the lighting backend to be adapted to different LED systems or smart lighting platforms.
+### 3. Rhythm & Dynamics
+-   **RMS-Based Onset Detection**: Captures both "Clicky" transients (High-Freq) and "Thumpy" kicks (Low-Freq).
+-   **Cinematic Release**: Brightness decays naturally, preventing a strobe-light effect.
+-   **Bass Punch**: Kicks momentarily "overdrive" the brightness for physical impact.
 
 ---
 
-## Current Status
+## 🛠 Architecture
 
-This repository is under active development.
+```mermaid
+graph TD
+    AudioInput[Audio Input (WASAPI/Mic)] --> |PCM Stream| PreProcess[DC Offset Removal]
+    PreProcess --> |Clean Audio| Splitter
+    
+    subgraph Analysis Core
+        Splitter --> |RMS| Loudness[Adaptive Normalizer]
+        Splitter --> |FFT| Spectrum[Spectral Flux]
+        Splitter --> |Derivative| Onset[Onset Detector]
+    end
+    
+    subgraph Mood Engine
+        Spectrum --> ValenceCalc{Valence (Mood)}
+        Loudness & Onset --> ArousalCalc{Arousal (Energy)}
+        
+        ValenceCalc --> |Warmth| ColorMap
+        ArousalCalc --> |Intensity| ColorMap
+    end
+    
+    subgraph Output
+        Loudness --> |Brightness| Mixer
+        ColorMap --> |RGB| Mixer
+        Mixer --> |Final Signal| PostProcess[Smoothing & Gamma]
+        PostProcess --> LED[LED Controller / UI]
+    end
+```
 
-The initial focus is on building a **minimum viable prototype (MVP)** based on:
-- Tempo detection
-- Key estimation
-- Loudness-based brightness control
+## 🧮 Core Logic & Formulas
 
-Future stages will include:
-- Chord recognition
-- Musical section detection (verse, chorus, etc.)
-- More expressive emotional models
-- Advanced lighting animations
+### Valence (Mood) Calculation
+We calculate how "Warm" (Positive) or "Cool" (Negative) the music sounds:
+
+$$ Valence = (0.4 \times V_{absolute}) + (0.6 \times V_{adaptive}) $$
+
+Where:
+-   **$V_{absolute}$**: Is the song naturally bright (Pop/Rock) or dark (Techno)? Anchored at ~8% Mid/High dominance.
+-   **$V_{adaptive}$**: Is the *current* moment brighter than the song's average?
+
+### Arousal (Energy) Mapping
+Maps to the saturation and intensity of the color:
+
+$$ Arousal = \frac{Loudness + (OnsetStrength \times 2.0)}{3.0} $$
 
 ---
 
-## Motivation
+## 🚀 Installation
 
-Music naturally evokes emotional and visual associations in listeners.
+1.  **Clone the Repo**:
+    ```bash
+    git clone https://github.com/your-username/music-reactive-lighting.git
+    cd music-reactive-lighting
+    ```
 
-This project aims to externalize that internal experience by turning music into a **visually expressive, emotion-driven lighting environment**, bridging signal processing, music theory, and perceptual design.
+2.  **Install Dependencies**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+    *(Requires `numpy`, `pyaudio`, `scipy`)*
+
+3.  **Run**:
+    ```bash
+    # Run with GUI Debugger (Best for testing)
+    python -m app.main --live --gui
+    
+    # Run in Headless Mode (For Raspberry Pi)
+    python -m app.main --live
+    ```
+
+## 🔧 Debugging Tools
+
+We include huge tools for analysis:
+-   `tools/measure_noise.py`: Measure your hardware's noise floor.
+-   `tools/record_samples.py`: Record audio chunks for testing.
+-   `tools/analyze_track.py`: Generate CSV reports of audio files.
 
 ---
 
-## License
+## 🔮 Future Roadmap
 
-This project is licensed under the MIT License.
+-   [ ] **Hardware Integration**: Serial output for ESP32/Arduino.
+-   [ ] **Beat Grid**: Proper Bar/Measure detection (1-2-3-4 counting).
+-   [ ] **Genre Presets**: Load "Chill" vs "Party" profiles.
+
+---
+
+*Crafted with ❤️ and Python.*

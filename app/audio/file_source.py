@@ -16,7 +16,7 @@ class AudioStreamInfo:
 def frames_from_file(
     path: str,
     fps: float = 20.0,
-    target_sr: int = 44100,
+    target_sr: int | None = 44100,
 ) -> Tuple[AudioStreamInfo, Iterator[np.ndarray]]:
     """
     Yields mono float32 frames from an audio file.
@@ -29,7 +29,7 @@ def frames_from_file(
     sr = f.samplerate
     ch = f.channels
 
-    if sr != target_sr:
+    if target_sr is not None and sr != target_sr:
         raise ValueError(
             f"Expected sample_rate={target_sr}, got {sr}. "
             "For v1, please use a 44.1kHz WAV. (We will add resampling later.)"
