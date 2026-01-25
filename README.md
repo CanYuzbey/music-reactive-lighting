@@ -96,7 +96,7 @@ $$ A = \frac{Loudness_{norm} + (Onset_{strength} \cdot 2.0)}{3.0} $$
 ### Setup
 1.  **Clone the Repository**:
     ```bash
-    git clone https://github.com/your-username/music-reactive-lighting.git
+    git clone https://github.com/CanYuzbey/music-reactive-lighting.git
     cd music-reactive-lighting
     ```
 
