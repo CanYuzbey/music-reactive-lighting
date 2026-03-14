@@ -23,7 +23,9 @@ class SongMemoryBank:
             "global_avg_high_exertion": 1.0,
             "typical_arousal": 0.5,
             "typical_valence": 0.5,
-            "learning_rate": 0.05 # How much each deleted song shifts the global model
+            "learning_rate": 0.05, # How much each deleted song shifts the global model
+            "global_dominance_anchor": 0.66, # Learned center of warmth
+            "valence_spread_multiplier": 1.5   # Learned dynamic range
         }
         if os.path.exists(self.model_path):
             try:
@@ -44,7 +46,7 @@ class SongMemoryBank:
         """
         Extracts insights from a song's log before it is deleted.
         """
-        print(f"🧠 Memory Bank: Digesting {os.path.basename(csv_filepath)} before deletion...")
+        print(f"Memory Bank: Digesting {os.path.basename(csv_filepath)} before deletion...")
         
         try:
             bass_exertions = []
@@ -52,6 +54,7 @@ class SongMemoryBank:
             high_exertions = []
             arousals = []
             valences = []
+            dominance = []
             
             with open(csv_filepath, 'r') as f:
                 reader = csv.DictReader(f)
@@ -61,6 +64,7 @@ class SongMemoryBank:
                     high_exertions.append(float(row.get('Exert_H', 1.0)))
                     arousals.append(float(row.get('Arousal', 0.5)))
                     valences.append(float(row.get('Valence', 0.5)))
+                    dominance.append(float(row.get('Dominance', 0.66)))
                     
             if not bass_exertions: return
             
@@ -71,6 +75,20 @@ class SongMemoryBank:
             song_avg_high = np.mean([x for x in high_exertions if x > 0.01]) if max(high_exertions) > 0.01 else 1.0
             song_avg_arousal = np.mean(arousals)
             song_avg_valence = np.mean(valences)
+            
+            # Machine Learning Optimizer: Evaluate Variance and Dominance Center
+            song_avg_dominance = np.mean([x for x in dominance if x > 0.0]) if len(dominance) > 0 else 0.66
+            valence_std = np.std(valences) if len(valences) > 0 else 0.35
+            
+            # If standard deviation is too low (colors not changing enough), we bump the multiplier
+            # Target std for valence is around ~0.35 for a very dynamic show
+            target_std = 0.35
+            if valence_std > 0.01:
+                 # Calculate ratio needed to hit target, bounded for safety
+                 ideal_spread = (target_std / valence_std) * self.model.get("valence_spread_multiplier", 1.5)
+                 ideal_spread = max(1.0, min(3.0, ideal_spread))  # Keep it sane
+            else:
+                 ideal_spread = 1.5
             
             # Update global model using momentum
             lr = self.model["learning_rate"]
@@ -83,10 +101,15 @@ class SongMemoryBank:
             self.model["typical_arousal"] += (song_avg_arousal - self.model["typical_arousal"]) * lr
             self.model["typical_valence"] += (song_avg_valence - self.model["typical_valence"]) * lr
             
+            # Update physical algorithms
+            self.model["global_dominance_anchor"] = self.model.get("global_dominance_anchor", 0.66) + (song_avg_dominance - self.model.get("global_dominance_anchor", 0.66)) * lr
+            self.model["valence_spread_multiplier"] = self.model.get("valence_spread_multiplier", 1.5) + (ideal_spread - self.model.get("valence_spread_multiplier", 1.5)) * lr
+            
             self.model["total_songs_digested"] += 1
             
             self._save_model()
-            print(f"🧠 Memory Bank: Digestion complete. Updating global baseline expectations.")
+            print(f"Memory Bank: Digestion complete. Updating global baseline expectations.")
+            print(f"   -> New Anchor: {self.model['global_dominance_anchor']:.3f} | New Spread: {self.model['valence_spread_multiplier']:.3f}x")
             
         except Exception as e:
             print(f"MemoryBank failed to digest log: {e}")

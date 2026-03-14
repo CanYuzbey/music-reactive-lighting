@@ -11,6 +11,7 @@ class MoodState:
 class MoodEngine:
     def __init__(self, global_baselines: dict = None):
         self.last_valence = 0.5
+        self.last_arousal = 0.0
         
         # Adaptive Tri-Band Exertion (Historical Baselines)
         # If we have neural memory from past 20 songs, use it. Otherwise guess.
@@ -19,10 +20,14 @@ class MoodEngine:
             self.avg_mid = global_baselines.get("global_avg_mid_exertion", 0.33)
             self.avg_high = global_baselines.get("global_avg_high_exertion", 0.33)
             self.last_valence = global_baselines.get("typical_valence", 0.5)
+            self.dominance_anchor = global_baselines.get("global_dominance_anchor", 0.66)
+            self.valence_spread = global_baselines.get("valence_spread_multiplier", 1.5)
         else:
             self.avg_low = 0.33
             self.avg_mid = 0.33
             self.avg_high = 0.33
+            self.dominance_anchor = 0.66
+            self.valence_spread = 1.5
             
         self.learning_rate = 0.005 # Slow adaptation (Inertia)
 
@@ -73,17 +78,17 @@ class MoodEngine:
             exertion_sum = exert_low + exert_mid + exert_high + 1e-6
             
             # Dominance of Warm/Bright Exertion (Mid + High vs Total Exertion)
-            # In a perfectly balanced moment, each exerts 1.0, so dominance = 2.0 / 3.0 = 0.66
             current_dominance = (exert_mid + exert_high) / exertion_sum
             
-            # 4. Hybrid Valence Mixing
-            # Absolute Component (Center at 0.66 ideally)
-            absolute_valence = 0.5 + (current_dominance - 0.66) * 1.5
+            # 4. Hybrid Valence Mixing (Powered by ML Memory Bank)
+            # Absolute Component (Dynamic center learned from user history)
+            absolute_valence = 0.5 + (current_dominance - self.dominance_anchor) * self.valence_spread
             absolute_valence = max(0.0, min(1.0, absolute_valence))
             
             # Adaptive Component (Deviation from perfect balance)
-            deviation = current_dominance - 0.66
-            adaptive_valence = 0.5 + (deviation * 3.0)
+            deviation = current_dominance - self.dominance_anchor
+            # Adaptive is always twice as aggressive to capture small emotional changes
+            adaptive_valence = 0.5 + (deviation * (self.valence_spread * 2.0))
             
             # Mix: 30% Absolute, 70% Adaptive (Strongly favor changes in exertion)
             normalized_valence = (absolute_valence * 0.3) + (adaptive_valence * 0.7)
@@ -98,15 +103,28 @@ class MoodEngine:
             if onset > 0.3:
                  normalized_valence += 0.15
                  
-            self.last_valence = max(0.0, min(1.0, normalized_valence))
-        else:
-            # Silence Handling:
-            # 1. Decay arousal to 0.0 (Calm)
-            arousal = 0.0
+            # 7. DYNAMIC SMOOTHING: 
+            # High energy tracks (Pepe Lit, Marshmello) need fast reactive colors.
+            # Low energy tracks (Ballerina) need slow, fluid color gliding.
+            # We base the transition speed on the current Arousal & Onset (Energy).
+            base_glide = 0.05
+            energy_boost = (arousal * 0.15) + (onset * 0.2)
+            dynamic_glide_speed = base_glide + energy_boost
+            # Clamp smoothing speed so it always glides a little, but can snap when needed
+            dynamic_glide_speed = max(0.02, min(0.6, dynamic_glide_speed))
+                 
+            target_valence = max(0.0, min(1.0, normalized_valence))
+            self.last_valence += (target_valence - self.last_valence) * dynamic_glide_speed
             
-            # 2. Slowly drift valence to 0.5 (Neutral) to prevent "waking up" with a weird color
+            target_arousal = max(0.0, min(1.0, arousal))
+            self.last_arousal += (target_arousal - self.last_arousal) * dynamic_glide_speed
+        else:
+            # Silence decay
+            # Slowly drift valence to 0.5 (Neutral) to prevent "waking up" with a weird color
             # But do it VERY slowly so short pauses don't reset the vibe.
             self.last_valence += (0.5 - self.last_valence) * 0.01
+            # Decay arousal to 0.0 (Calm)
+            self.last_arousal += (0.0 - self.last_arousal) * 0.05
 
         debug = {
             "exert_low": exert_low if loudness > 0.01 else 0.0,
@@ -117,7 +135,7 @@ class MoodEngine:
         }
 
         return MoodState(
-            arousal=max(0.0, min(1.0, arousal)),
+            arousal=self.last_arousal,
             valence=self.last_valence,
             debug_data=debug
         )

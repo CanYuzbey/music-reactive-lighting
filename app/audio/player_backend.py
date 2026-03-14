@@ -25,6 +25,7 @@ class FrameAnalysis:
     valence: float
     raw_rms: float
     onset: float
+    key: str
     debug_data: dict
 
 class TrackAnalyzer:
@@ -32,15 +33,43 @@ class TrackAnalyzer:
         self.fps = fps
         self.target_sr = target_sr
         
-    def analyze_file(self, filepath: str, progress_callback=None) -> List[FrameAnalysis]:
+    def analyze_file(self, filepath: str, progress_callback=None) -> Tuple[List[FrameAnalysis], str]:
         """
         Loads the entire audio file, runs the MoodEngine over it,
-        and returns a pre-computed list of FrameAnalysis for flawless playback.
+        and returns a pre-computed list of FrameAnalysis for flawless playback,
+        along with the path to the diagnostic log file.
         """
         # 1. Load Audio
         if progress_callback: progress_callback(0.0, "Loading audio file...")
         y, sr = librosa.load(filepath, sr=self.target_sr, mono=True)
         
+        # 1a. HPSS (Harmonic-Percussive Source Separation) for Advanced Separation
+        if progress_callback: progress_callback(0.04, "Isolating Instruments (HPSS)...")
+        y_harmonic, y_percussive = librosa.effects.hpss(y)
+        
+        # 1b. Global Key Detection (Krumhansl-Schmuckler)
+        if progress_callback: progress_callback(0.05, "Extracting Musical Key...")
+        chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+        chroma_sum = np.sum(chroma, axis=1)
+        
+        major_profile = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88]
+        minor_profile = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17]
+        pitch_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        
+        best_corr = -1
+        song_key = "Unknown"
+        for i in range(12):
+            maj_p = np.roll(major_profile, i)
+            min_p = np.roll(minor_profile, i)
+            maj_corr = np.corrcoef(chroma_sum, maj_p)[0, 1]
+            if maj_corr > best_corr:
+                best_corr = maj_corr
+                song_key = f"{pitch_names[i]} Maj"
+            min_corr = np.corrcoef(chroma_sum, min_p)[0, 1]
+            if min_corr > best_corr:
+                best_corr = min_corr
+                song_key = f"{pitch_names[i]} Min"
+                
         # 2. Setup Engines
         if progress_callback: progress_callback(0.1, "Initializing engines...")
         params = DynamicsParams(enter_hold_frames=int(3 * self.fps), drop_boost_frames=int(0.5 * self.fps))
@@ -76,6 +105,8 @@ class TrackAnalyzer:
             start = i * frame_size
             end = start + frame_size
             frame = y[start:end]
+            frame_h = y_harmonic[start:end]
+            frame_p = y_percussive[start:end]
             
             # Match live pipeline logic exactly
             frame = frame - np.mean(frame) # DC offset
@@ -88,11 +119,11 @@ class TrackAnalyzer:
             ib = instant_b.latest()
             sb = short_b.average()
             
-            # Onset
-            o = normalize_onset(onset_strength(frame))
+            # Onset (Uses percussive component for strict drum tracking)
+            o = normalize_onset(onset_strength(frame_p))
             
-            # Bands
-            bands = spectral_energy_bands(frame, sr)
+            # Bands (Uses harmonic/percussive split for instrument isolation)
+            bands = spectral_energy_bands(frame, sr, frame_h, frame_p)
             
             # Dynamics
             st = dyn.update(instant_brightness=ib, short_brightness=sb, onset=o)
@@ -122,7 +153,7 @@ class TrackAnalyzer:
                 density=tempo_state.density,
                 band_energy=bands
             )
-            rgb = color_engine.map_mood_to_color(mood, bpm_stability=tempo_state.confidence)
+            rgb = color_engine.map_mood_to_color(mood, song_key=song_key, bpm_stability=tempo_state.confidence)
             
             results.append(FrameAnalysis(
                 time_sec=i / self.fps,
@@ -134,6 +165,7 @@ class TrackAnalyzer:
                 valence=mood.valence,
                 raw_rms=rms,
                 onset=o,
+                key=song_key,
                 debug_data=mood.debug_data
             ))
             
@@ -190,6 +222,7 @@ class TrackAnalyzer:
             print(f"Saved diagnostic log to {log_path} (Memory: {min(len(existing_logs), 20)}/20)")
         except Exception as e:
             print(f"Failed to write log: {e}")
+            log_path = ""
             
         if progress_callback: progress_callback(1.0, "Analysis complete!")
-        return results
+        return results, log_path
