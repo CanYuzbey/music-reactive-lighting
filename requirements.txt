@@ -1,4 +1,10 @@
-numpy
-soundfile
-
-
+numpy==2.4.1
+soundfile==0.13.1
+librosa==0.11.0
+pygame==2.6.1
+customtkinter==5.2.2
+mutagen==1.47.0
+pandas==3.0.0
+scikit-learn==1.8.0
+pytest
+pyaudiowpatch
