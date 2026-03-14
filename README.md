@@ -44,7 +44,7 @@ graph TD
     
     AudioSource["🎵 Audio Source<br/>(File or Live Loopback)"]:::main --> Analyzer["Backend Analyzer"]:::main
     
-    subgraph Signal Processing Core (Librosa)
+    subgraph "Signal Processing Core (Librosa)"
         Analyzer --> HPSS["Harmonic / Percussive<br/>Source Separation"]:::sub
         HPSS --> Harmonic["Harmonic Signal"]:::sub
         HPSS --> Percussive["Percussive Signal"]:::sub
@@ -54,7 +54,7 @@ graph TD
         Analyzer --> Key["Musical Key Detector"]:::sub
     end
     
-    subgraph Tri-Band Exertion & Mood Engine
+    subgraph "Tri-Band Exertion & Mood Engine"
         Mids --> Exertion["Rolling Exertion Math"]:::sub
         Percussive --> Exertion
         Exertion --> Valence["Continuous 2D Valence"]:::sub
@@ -65,7 +65,7 @@ graph TD
         Key --> Color
     end
     
-    subgraph Front-End UI
+    subgraph "Front-End UI"
         Color --> Pacing["Macro-Pacing Engine<br/>(Color Blocks & Debouncer)"]:::sub
         Pacing --> PlayerUI["App Interface"]:::main
         
